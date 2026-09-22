@@ -1,0 +1,64 @@
+plugins {
+    id 'java'
+    id 'io.freefair.lombok' version '8.6'
+    id 'com.gradleup.shadow' version '8.3.6'
+}
+
+// Scripts are RuneLite plugins compiled against the Project X client, then
+// shipped as a single jar. The client provides everything in
+// net.runelite.client.plugins.projectx.* at runtime, so it is compileOnly --
+// bundling it would collide with the client's own classes.
+
+def clientVersion = project.findProperty('projectxClientVersion') ?: '2.6.22'
+def clientPath = project.findProperty('projectxClientPath')
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+        vendor = JvmVendorSpec.ADOPTIUM
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 11
+}
+
+repositories {
+    // The client jar is published as a GitHub release asset, not to Maven.
+    ivy {
+        name = 'xclient-releases'
+        url = uri('https://github.com/iEasyScript/xclient/releases/download')
+        patternLayout {
+            artifact '[revision]/projectx-[revision].[ext]'
+        }
+        metadataSources { artifact() }
+    }
+    mavenCentral()
+}
+
+dependencies {
+    if (clientPath) {
+        compileOnly files(clientPath)
+    } else {
+        compileOnly "com.projectx:projectx:${clientVersion}@jar"
+    }
+
+    // Anything your script needs on top of the client goes here; it will be
+    // bundled into the jar by shadowJar.
+    // implementation 'org.apache.commons:commons-lang3:3.14.0'
+}
+
+shadowJar {
+    archiveBaseName = 'ExamplePlugin'   // must match your plugin's class name
+    archiveClassifier = ''
+    archiveVersion = ''
+
+    // Reproducible output, so the same source always hashes the same.
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'module-info.class'
+}
+
+tasks.named('build') { dependsOn shadowJar }
