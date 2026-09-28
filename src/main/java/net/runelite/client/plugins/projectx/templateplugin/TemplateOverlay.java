@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.projectx.exampleplugin;
+package net.runelite.client.plugins.projectx.templateplugin;
 
 import net.runelite.client.plugins.projectx.ProjectX;
 import net.runelite.client.ui.overlay.OverlayPanel;
@@ -11,9 +11,9 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 
 /** On-screen status. Keep render() cheap: it runs every frame. */
-public class ExampleOverlay extends OverlayPanel {
+public class TemplateOverlay extends OverlayPanel {
     @Inject
-    ExampleOverlay(ExamplePlugin plugin) {
+    TemplateOverlay(TemplatePlugin plugin) {
         super(plugin);
         setPosition(OverlayPosition.TOP_LEFT);
         setNaughty();
@@ -23,7 +23,7 @@ public class ExampleOverlay extends OverlayPanel {
     public Dimension render(Graphics2D graphics) {
         panelComponent.setPreferredSize(new Dimension(200, 60));
         panelComponent.getChildren().add(TitleComponent.builder()
-                .text("Example v" + ExamplePlugin.version)
+                .text("Template v" + TemplatePlugin.version)
                 .build());
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Status:")

@@ -9,7 +9,7 @@ plugins {
 // net.runelite.client.plugins.projectx.* at runtime, so it is compileOnly --
 // bundling it would collide with the client's own classes.
 
-def clientVersion = project.findProperty('projectxClientVersion') ?: '2.6.22'
+def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.5'
 def clientPath = project.findProperty('projectxClientPath')
 
 java {
@@ -50,7 +50,7 @@ dependencies {
 }
 
 shadowJar {
-    archiveBaseName = 'ExamplePlugin'   // must match your plugin's class name
+    archiveBaseName = 'TemplatePlugin'   // must match your plugin's class name
     archiveClassifier = ''
     archiveVersion = ''
 

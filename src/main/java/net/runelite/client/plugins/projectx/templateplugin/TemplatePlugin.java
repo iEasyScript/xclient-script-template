@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.projectx.exampleplugin;
+package net.runelite.client.plugins.projectx.templateplugin;
 
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
@@ -10,12 +10,12 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
 
 /**
- * The plugin: lifecycle and wiring. The actual work lives in {@link ExampleScript}.
+ * The plugin: lifecycle and wiring. The actual work lives in {@link TemplateScript}.
  *
  * Every field in the descriptor below matters:
  *   name             what the user sees in the plugin list
  *   version          bump it on every change; the store and the hub key off it
- *   minClientVersion the oldest client this script is known to work on
+ *   minClientVersion the oldest plugin API your script needs, not a client release
  *   isExternal       true for anything not built into the client
  *
  * The class name is the script's identity: the jar is named after it, and a
@@ -23,33 +23,38 @@ import javax.inject.Inject;
  * breaking change.
  */
 @PluginDescriptor(
-        name = ExamplePlugin.PREFIX + "Example",
+        name = "Template Script",
         description = "Template script: idles, logs, and shows an overlay",
         tags = {"example", "template"},
-        version = ExamplePlugin.version,
+        version = TemplatePlugin.version,
+        // The plugin API level you need, which is not the client's release
+        // number. The client publishes both: it is on 1.x, and provides plugin
+        // API 2.6.22. Leave this alone unless you are using something added to
+        // the API after that; setting it to a client release like "1.0.5" says
+        // nothing useful, and setting it above the API level the client offers
+        // stops your script loading at all.
         minClientVersion = "2.6.22",
         enabledByDefault = false,
         isExternal = true
 )
 @Slf4j
-public class ExamplePlugin extends Plugin {
+public class TemplatePlugin extends Plugin {
     /** Your mark in the plugin list. Pick your own colour and initials. */
-    static final String PREFIX = "<html>[<font color=#e8c97e>PX</font>] ";
 
     public static final String version = "1.0.0";
 
     @Inject
-    private ExampleScript exampleScript;
+    private TemplateScript exampleScript;
     @Inject
-    private ExampleConfig config;
+    private TemplateConfig config;
     @Inject
     private OverlayManager overlayManager;
     @Inject
-    private ExampleOverlay overlay;
+    private TemplateOverlay overlay;
 
     @Provides
-    ExampleConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(ExampleConfig.class);
+    TemplateConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(TemplateConfig.class);
     }
 
     @Override

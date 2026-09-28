@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.projectx.exampleplugin;
+package net.runelite.client.plugins.projectx.templateplugin;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.projectx.ProjectX;
@@ -17,8 +17,8 @@ import java.util.concurrent.TimeUnit;
  *   3. Leave no trace in shutdown(): cancel timers, clear state, unregister.
  */
 @Slf4j
-public class ExampleScript extends Script {
-    public boolean run(ExampleConfig config) {
+public class TemplateScript extends Script {
+    public boolean run(TemplateConfig config) {
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 // super.run() honours pause/stop and the blocking-event system
@@ -33,7 +33,7 @@ public class ExampleScript extends Script {
             } catch (Exception e) {
                 // Never let an exception escape into the executor: it kills the
                 // loop silently.
-                log.error("Example script failed", e);
+                log.error("Template script failed", e);
             }
         }, 0, 600, TimeUnit.MILLISECONDS); // 600ms is one game tick
         return true;

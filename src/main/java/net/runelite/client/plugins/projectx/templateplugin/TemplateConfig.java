@@ -1,12 +1,12 @@
-package net.runelite.client.plugins.projectx.exampleplugin;
+package net.runelite.client.plugins.projectx.templateplugin;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
 /** Anything the user can change. Shown in the Project X config panel. */
-@ConfigGroup(ExampleConfig.GROUP)
-public interface ExampleConfig extends Config {
+@ConfigGroup(TemplateConfig.GROUP)
+public interface TemplateConfig extends Config {
     String GROUP = "example";
 
     @ConfigItem(
