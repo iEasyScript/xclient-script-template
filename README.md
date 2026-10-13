@@ -32,7 +32,7 @@ nothing else installed but a JDK.
 Working on the client at the same time? Point the build at your local copy:
 
 ```bash
-./gradlew build -PprojectxClientPath=../xclient/runelite-client/build/libs/projectx-1.0.5.jar
+./gradlew build -PprojectxClientPath=../xclient/runelite-client/build/libs/projectx-1.0.47.jar
 ```
 
 ## Run it on your own machine
@@ -82,8 +82,8 @@ They are easy to mix up, and mixing them up stops your script loading.
 
 | | What it is | Where it goes |
 |---|---|---|
-| **Client release** | What the client is called. Currently `1.0.5` | `projectxClientVersion` in `gradle.properties` |
-| **Plugin API** | What the client offers scripts. Currently `2.6.22` | `minClientVersion` in your `@PluginDescriptor` |
+| **Client release** | What the client is called. Currently `1.0.47` | `projectxClientVersion` in `gradle.properties` |
+| **Plugin API** | What the client offers scripts. Currently `2.6.29` | `minClientVersion` in your `@PluginDescriptor` |
 
 They are separate on purpose. The client was renumbered to 1.x without the API changing, so
 tying the two together would have declared every existing script incompatible overnight.

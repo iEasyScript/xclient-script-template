@@ -9,7 +9,7 @@ plugins {
 // net.runelite.client.plugins.projectx.* at runtime, so it is compileOnly --
 // bundling it would collide with the client's own classes.
 
-def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.5'
+def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.47'
 def clientPath = project.findProperty('projectxClientPath')
 
 java {
