@@ -116,6 +116,20 @@ your plugin class — the jar must be named after it.
    script that leaves state behind breaks on its next start, not this one.
 4. **Bump `version` on every change.** The store and the hub key off it.
 
+## Direct input and prayer flicking
+
+`ProjectX.withDirectInput(() -> ...)` sends the clicks inside it straight to the game, with no
+mouse movement, so they don't wait on the mouse your script is using for something else.
+`Rs2Prayer.flickQuickPrayer()` and `Rs2Prayer.flick(prayer)` do one tick of 1-tick prayer
+flicking. Call them from an `onGameTick` subscriber inside `withDirectInput`, so the prayer stays
+up and never drains. Both need client 1.0.47 (`minClientVersion = "2.6.29"`).
+
+Direct input is easier for the game to detect than a mouse click, so offer it as a setting.
+Details and examples:
+[direct input](https://github.com/iEasyScript/xclient/blob/publish/docs/api/DirectInput.md)
+·
+[prayer flicking](https://github.com/iEasyScript/xclient/blob/publish/docs/api/Rs2Prayer.md#1-tick-flicking)
+
 The full guide, including the queryable API for game state and the anti-ban helpers, is in
 the client repo:
 [plugin guide](https://github.com/iEasyScript/xclient/blob/main/runelite-client/src/main/java/net/runelite/client/plugins/projectx/AGENTS.md)
