@@ -6,18 +6,33 @@
 
 <p align="center">
   A working script you can clone and build in one command.<br>
-  <a href="https://xclient.dev">xclient.dev</a>
+  <a href="https://xclient.dev/osrs/developer/docs">Developer docs</a> ·
+  <a href="https://xclient.dev/osrs/developer">Developer portal</a>
 </p>
 
 ---
 
 Scripts are RuneLite plugins compiled against the [Project X client](https://github.com/iEasyScript/xclient).
-This repository is a minimal, working example: clone it, rename it, write your logic.
+This repository is a complete, small script you can rename and build on. It works on an object
+(a tree, a rock) until the inventory is full, banks at the nearest bank, walks back and carries
+on, and it shows the parts every store script should have:
 
-Your script's source stays yours. Only the built jar is published, so scripts sold
-on the marketplace stay closed source.
+- a state-machine loop that works out what to do from the game, so it can start anywhere;
+- guarded steps, a recovery handler and checkpoints from `reliability()`, so it stops itself
+  cleanly instead of clicking forever when something goes wrong;
+- the shared stats panel (`ScriptPanel`, `SkillTracker`) every Project X script uses;
+- an inventory-setup picker in its settings, loaded with `Rs2InventorySetup`.
 
-## Build it
+Your source stays yours. The store needs your source to review a build, but only the jar is
+ever given to players.
+
+Full documentation, including an API cookbook and the common traps, is at
+**[xclient.dev/osrs/developer/docs](https://xclient.dev/osrs/developer/docs)**.
+
+## Quick start
+
+You need **a JDK 11** installed (for example [Temurin 11](https://adoptium.net/temurin/releases/?version=11)).
+Gradle uses it for the build whatever your default Java is, so it is fine to have newer ones too.
 
 ```bash
 git clone https://github.com/iEasyScript/xclient-script-template.git
@@ -25,124 +40,165 @@ cd xclient-script-template
 ./gradlew build
 ```
 
-That produces `build/libs/TemplatePlugin.jar`. The client jar it compiles against is
-downloaded from [releases](https://github.com/iEasyScript/xclient/releases) — you need
-nothing else installed but a JDK.
+That produces two files:
 
-Working on the client at the same time? Point the build at your local copy:
+| File | What it is |
+|---|---|
+| `build/libs/TemplatePlugin.jar` | The script. This is what you upload |
+| `build/distributions/TemplatePlugin-source.zip` | Its source, which the store asks for alongside the jar |
 
-```bash
-./gradlew build -PprojectxClientPath=../xclient/runelite-client/build/libs/projectx-1.0.47.jar
+## Project layout
+
+```
+src/main/java/net/runelite/client/plugins/projectx/templateplugin/
+  TemplatePlugin.java    lifecycle and wiring; the @PluginDescriptor is your script's identity
+  TemplateScript.java    the loop, on a background thread: states, guarded steps, recovery
+  TemplateConfig.java    the settings the player can change, including the inventory setup
+  TemplateOverlay.java   the stats panel
+build.gradle             finds the client jar, builds the jar and the source zip
+gradle.properties        pluginName and the client version to compile against
 ```
 
-## Run it on your own machine
+To make it yours:
 
-Nothing needs publishing to test a script. The client side-loads every jar in its plugin
-folder at start-up, so your build is one copy away from running.
+1. Rename the package and the four classes to your script's name, e.g. `MyCoolPlugin`.
+2. Set `pluginName` in `gradle.properties` to the new plugin class name. The jar is named after
+   it, and the client finds your script by it.
+3. Change `TemplateConfig.GROUP` to something unique to your script.
+4. Pick a name nothing else on the store uses. Check the
+   [live catalogue](https://xclient.dev/api/v1/hub/plugins.json): if your plugin class shares a
+   name with a published script, the client treats your jar as a stale copy of that one and
+   replaces it.
 
-```bash
-./gradlew build
-cp build/libs/TemplatePlugin.jar ~/.runelite/projectx-plugins/
-```
+## Building
 
-On Windows that folder is `%USERPROFILE%\.runelite\projectx-plugins\`.
+The build compiles against the Project X client jar. It finds one in this order:
 
-Start the client and your script is in the plugin list under the name in its
-`@PluginDescriptor`. Each rebuild is the same three steps: build, copy over the old jar,
-restart the client.
+1. `-PprojectxClientPath=/path/to/projectx-1.0.56.jar`, if you pass it;
+2. the copy the Project X launcher already downloaded, `~/.projectx/projectx-<version>.jar`
+   (`%USERPROFILE%\.projectx\` on Windows);
+3. otherwise it downloads `projectx-<version>.jar` from the
+   [client's GitHub release](https://github.com/iEasyScript/xclient/releases).
 
-**The jar's filename must be your plugin class's simple name.** The client works out what a
-side-loaded jar contains from its filename, so `TemplatePlugin.jar` must hold
-`TemplatePlugin`. That is what `archiveBaseName` in `build.gradle` sets, and getting it wrong
-is the usual reason a script never appears.
+`<version>` is `projectxClientVersion` in `gradle.properties`. The first line of the build says
+which jar it used.
 
-A few things worth knowing while you iterate:
+**Always build against the client players are running.** Item, object and widget ids are Java
+constants, and the compiler copies their values into your classes. A jar built against an old
+client keeps the old values even when it runs on a new one, which is how a script ends up
+clicking the wrong widget after a game update. When a new client is released, bump
+`projectxClientVersion`, rebuild, and upload a new version.
 
-- **A jar that fails to load is not retried** until its bytes change. That is deliberate --
-  it stops a broken build being fetched over and over -- and a rebuild changes the bytes, so
-  it only bites if you restart the client without rebuilding.
-- **Paid scripts are not gated locally.** Access is only checked for scripts the store
-  knows about. Yours is not one until you publish it, so it simply runs.
-- **Attach a debugger and the API version check is skipped**, which is convenient while the
-  numbers are in flux. Without one, the check applies as it would for anyone else.
-- **Do not leave jars in that folder.** It is managed: the client tidies away anything that
-  is not in its catalogue after three days.
-- **Pick a name nothing else uses.** If your plugin class shares its name with something
-  already published, the client treats your jar as a stale copy of that one, and replaces it
-  with the published build. Your code vanishes and the log talks about a hash mismatch.
-  Check the [catalogue](https://xclient.dev/api/v1/hub/plugins.json) before settling on a
-  name.
+## Testing it
 
-For a faster loop, the client can compile and hot-reload a script without restarting —
-see [`docs/AGENT_SERVER.md`](https://github.com/iEasyScript/xclient/blob/main/docs/AGENT_SERVER.md).
+Read this before you plan your testing: **the client only keeps scripts that are on the store.**
+
+The client loads any jar you copy into `~/.runelite/projectx-plugins/`
+(`%USERPROFILE%\.runelite\projectx-plugins\` on Windows), but about 30 seconds after start-up,
+and every 5 minutes after that, it checks its scripts against the store catalogue and switches
+off and unloads any it does not recognise. A script that has never been published is one of
+those, so it disappears from the plugin list shortly after it appears.
+
+So, today:
+
+- **Compile against the live client.** Most mistakes in a script are calls that no longer exist
+  or have a different signature, and the build catches every one of those.
+- **Keep your logic easy to check.** Decide what to do from the game in one place (`decide()` in
+  the template), keep each state's method short, and log state changes. The session log is in
+  `~/.runelite/logs/projectx/`.
+- **Run it for real by submitting it.** Every build is reviewed before it goes live; once your
+  first version is approved, each new version is a new upload on the same listing.
+
+## Publishing to the store
+
+1. `./gradlew build`.
+2. Sign in on the [developer portal](https://xclient.dev/osrs/developer) and choose
+   **Submit a script**. Upload `build/libs/<pluginName>.jar` and
+   `build/distributions/<pluginName>-source.zip`.
+3. **Internal name** must be your plugin class's simple name, exactly. It cannot be changed
+   later.
+4. **Version** must match `version` in your `@PluginDescriptor`. Each version can be uploaded
+   once, so bump it for every build.
+5. Set a price for 1 week, 2 weeks and 1 month in X Tokens (zero for free). You keep 70% of every
+   sale.
+
+A reviewer reads the source, then approves or rejects with a note. For later versions, use
+**Upload new version** on your script's page. The portal explains pricing and payouts in full.
 
 ## Two version numbers, and which is which
 
 They are easy to mix up, and mixing them up stops your script loading.
 
-| | What it is | Where it goes |
+| | What it is | Now | Where it goes |
+|---|---|---|---|
+| **Client release** | What the client is called | `1.0.56` | `projectxClientVersion` in `gradle.properties` |
+| **Plugin API** | What the client offers scripts | `2.6.31` | `minClientVersion` in your `@PluginDescriptor` |
+
+`minClientVersion` is the oldest plugin API your script needs. A client that offers less will not
+load the script (the log says `Plugin X needs plugin API 2.6.31 or higher`), and the plugin hub
+will not install it there. Set it to the API level that added the newest thing you use:
+
+| Plugin API | Client | Added |
 |---|---|---|
-| **Client release** | What the client is called. Currently `1.0.47` | `projectxClientVersion` in `gradle.properties` |
-| **Plugin API** | What the client offers scripts. Currently `2.6.29` | `minClientVersion` in your `@PluginDescriptor` |
+| `2.6.25` | 1.0.31 | `ScriptPanel`, `ScriptPanelOverlay`, `SkillTracker` |
+| `2.6.29` | 1.0.47 | `ProjectX.withDirectInput`, `Rs2Prayer.flick` / `flickQuickPrayer` |
+| `2.6.30` | 1.0.49 | `Rs2BoatNavigator`; `Rs2Walker.walkTo` sails to targets at sea |
+| `2.6.31` | 1.0.56 | `Script.reliability()` and the `util.reliability` package |
 
-They are separate on purpose. The client was renumbered to 1.x without the API changing, so
-tying the two together would have declared every existing script incompatible overnight.
-
-Set `projectxClientVersion` to the current release so you compile against the real thing.
-Leave `minClientVersion` alone unless you use something added to the API after 2.6.22.
-Putting a client release number there says nothing, and putting a number above the API the
-client provides stops your script loading, with a line in the log saying so.
-
-## What is in here
-
-| File | |
-|---|---|
-| `TemplatePlugin.java` | Lifecycle and wiring. The `@PluginDescriptor` is your script's identity |
-| `TemplateScript.java` | The loop, on a background thread |
-| `TemplateConfig.java` | Settings the user can change |
-| `TemplateOverlay.java` | On-screen status |
-
-Rename all four to your script's name, and set `archiveBaseName` in `build.gradle` to match
-your plugin class — the jar must be named after it.
+The template uses `reliability()`, so it declares `2.6.31`. Putting a client release number such as
+`1.0.56` there is wrong: as an API level it means "anything", so nothing is checked. `isExternal = true`
+must be set for the check to apply at all.
 
 ## The rules that matter
 
-1. **Never block the client thread.** `startUp()` starts the loop and returns. Game state
-   that must be read on the client thread goes through
-   `ProjectX.getClientThread().runOnClientThreadOptional(...)`.
-2. **Wait on conditions, not clocks.** `sleepUntil(() -> condition, timeout)` rather than a
-   fixed sleep.
-3. **Clean up in `shutdown()`.** Cancel timers, clear static state, unregister listeners. A
-   script that leaves state behind breaks on its next start, not this one.
-4. **Bump `version` on every change.** The store and the hub key off it.
+**Threads.** Three threads matter, and each has one job.
 
-## Direct input and prayer flicking
+| Thread | Runs | Rule |
+|---|---|---|
+| Your script's executor | the loop in `run()` | The only place to click, walk or wait |
+| Client thread | overlays, `@Subscribe` event handlers, `clientThread.invoke(...)` | Read and return. Never click, sleep or wait |
+| Swing UI thread | `startUp()`, `shutDown()`, the config panel | Start or stop the loop and return |
 
-`ProjectX.withDirectInput(() -> ...)` sends the clicks inside it straight to the game, with no
-mouse movement, so they don't wait on the mouse your script is using for something else.
-`Rs2Prayer.flickQuickPrayer()` and `Rs2Prayer.flick(prayer)` do one tick of 1-tick prayer
-flicking. Call them from an `onGameTick` subscriber inside `withDirectInput`, so the prayer stays
-up and never drains. Both need client 1.0.47 (`minClientVersion = "2.6.29"`).
+1. **Never click on the client thread.** A click made there is only queued and the call returns
+   at once, so the `sleepUntil` after it is measuring the wrong moment and the action looks like
+   it failed. Find things on the client thread, click off it:
+   ```java
+   Rs2TileObjectModel tree = ProjectX.getRs2TileObjectCache().query()
+           .withName("Tree").nearestOnClientThread();   // read on the client thread
+   if (tree != null) tree.click("Chop down");           // click from the script thread
+   ```
+2. **Read raw client state on the client thread**, with
+   `ProjectX.getClientThread().runOnClientThreadOptional(() -> ...)`. The `Rs2*` helpers already
+   do this for you. Avoid `clientThread.invoke(() -> someBoolean())`: a lambda that returns a
+   `boolean` picks the overload that re-runs it every tick until it returns true, and returns
+   nothing.
+3. **Wait on conditions, not clocks:** `sleepUntil(() -> condition, timeoutMs)`.
+4. **Catch everything in the loop.** An exception that escapes the scheduled lambda cancels it
+   silently: the script looks like it is running and does nothing.
+5. **Clean up in `shutdown()`.** Call `super.shutdown()`, then clear your own state, so the next
+   start is clean.
+6. **Keep `build()` and `render()` cheap.** They run every frame. No waiting, no clicking, no
+   network calls (such as `Rs2GrandExchange.getPrice`).
 
-Direct input is easier for the game to detect than a mouse click, so offer it as a setting.
-Details and examples:
-[direct input](https://github.com/iEasyScript/xclient/blob/publish/docs/api/DirectInput.md)
-·
-[prayer flicking](https://github.com/iEasyScript/xclient/blob/publish/docs/api/Rs2Prayer.md#1-tick-flicking)
+## Common traps
 
-The full guide, including the queryable API for game state and the anti-ban helpers, is in
-the client repo:
-[plugin guide](https://github.com/iEasyScript/xclient/blob/main/runelite-client/src/main/java/net/runelite/client/plugins/projectx/AGENTS.md)
-·
-[queryable API](https://github.com/iEasyScript/xclient/blob/main/runelite-client/src/main/java/net/runelite/client/plugins/projectx/api/QUERYABLE_API.md)
-
-## Selling it
-
-Paid scripts are listed on [xclient.dev](https://xclient.dev): you set a price for 1 week,
-2 weeks and 1 month, and keep 70% of every sale. Buyers' access is checked by the client
-while the script runs, so it stops working when their time is up.
+- **`Rs2Bank.withdrawX(name, amount)` only matches a bank stack holding at least `amount`.** Ask
+  for 28 when the bank has 20 and nothing happens. Use `Math.min(amount, Rs2Bank.count(name, true))`.
+- **Name matching differs between methods.** `Rs2Inventory.hasItem("axe")` matches a pickaxe
+  (partial), while `Rs2Inventory.contains("axe")` does not (exact). Most name methods have an
+  overload with a `boolean exact` parameter: pass `true` unless you mean "contains".
+- **`Rs2Inventory.count(name)` counts slots**, not a stack. Use `itemQuantity(name)` for coins,
+  runes and other stackables.
+- **The `SkillTracker` resets whenever the start time you pass changes.** Store
+  `System.currentTimeMillis()` once when the script starts and pass that; never `now - runtime`.
+- **Helpers set `ProjectX.status` themselves** (opening the bank, clicking an object). Keep your
+  own status field for the stats panel, as the template does.
+- **`Rs2Npc` and `Rs2GameObject` are deprecated for removal.** Use the caches:
+  `ProjectX.getRs2NpcCache().query()` and `ProjectX.getRs2TileObjectCache().query()`.
+- **Use named ids**, such as `net.runelite.api.gameval.InterfaceID` and `ItemID`, never raw
+  numbers. Game updates move widgets; the named ids move with them when you rebuild.
 
 ## Licence
 
-BSD 2-Clause, like the client. Do what you like with this example, including keeping your
-own script closed source.
+BSD 2-Clause, like the client. Do what you like with this example, including keeping your own
+script closed source.

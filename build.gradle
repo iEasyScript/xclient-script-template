@@ -4,18 +4,38 @@ plugins {
     id 'com.gradleup.shadow' version '8.3.6'
 }
 
-// Scripts are RuneLite plugins compiled against the Project X client, then
-// shipped as a single jar. The client provides everything in
-// net.runelite.client.plugins.projectx.* at runtime, so it is compileOnly --
-// bundling it would collide with the client's own classes.
+// Scripts are RuneLite plugins compiled against the Project X client, then shipped as a
+// single jar. The client provides everything in net.runelite.client.* at runtime, so it is
+// compileOnly: bundling it would collide with the client's own classes.
 
-def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.47'
+// Your plugin class's simple name. The jar must be named after it, and the store listing's
+// internal name must match it. Set it in gradle.properties.
+def pluginName = project.findProperty('pluginName') ?: 'TemplatePlugin'
+
+// Which client jar to compile against, in this order:
+//   1. -PprojectxClientPath=/path/to/projectx-x.y.z.jar, if given;
+//   2. the jar the Project X launcher already downloaded, ~/.projectx/projectx-<version>.jar;
+//   3. otherwise it is downloaded from the client's GitHub release.
+// Always compile against the client players are running. Constants such as item, object and
+// widget ids are copied into your classes at compile time, so an old client jar bakes old
+// ids into your script.
+def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.56'
 def clientPath = project.findProperty('projectxClientPath')
+if (!clientPath) {
+    def launcherJar = new File(System.getProperty('user.home'), ".projectx/projectx-${clientVersion}.jar")
+    if (launcherJar.isFile()) {
+        clientPath = launcherJar.absolutePath
+    }
+}
+logger.lifecycle(clientPath
+        ? "Compiling against ${clientPath}"
+        : "Compiling against client ${clientVersion}, downloaded from its GitHub release")
 
 java {
     toolchain {
+        // The client runs on Java 11 and later, so scripts are compiled for 11. Gradle uses a
+        // JDK 11 for this whatever your default Java is; any vendor will do.
         languageVersion = JavaLanguageVersion.of(11)
-        vendor = JvmVendorSpec.ADOPTIUM
     }
 }
 
@@ -44,13 +64,14 @@ dependencies {
         compileOnly "com.projectx:projectx:${clientVersion}@jar"
     }
 
-    // Anything your script needs on top of the client goes here; it will be
-    // bundled into the jar by shadowJar.
-    // implementation 'org.apache.commons:commons-lang3:3.14.0'
+    // Anything your script needs on top of the client goes here; shadowJar bundles it into
+    // your jar. Most scripts need nothing: the client already ships Guava, Gson, OkHttp and
+    // Apache Commons Lang and Text.
+    // implementation 'org.example:some-library:1.2.3'
 }
 
 shadowJar {
-    archiveBaseName = 'TemplatePlugin'   // must match your plugin's class name
+    archiveBaseName = pluginName
     archiveClassifier = ''
     archiveVersion = ''
 
@@ -61,4 +82,19 @@ shadowJar {
     exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA', 'module-info.class'
 }
 
-tasks.named('build') { dependsOn shadowJar }
+// The store wants the source your jar was built from, as a .zip, next to the jar.
+// ./gradlew build makes both: build/libs/<pluginName>.jar and build/distributions/<pluginName>-source.zip
+tasks.register('sourceZip', Zip) {
+    group = 'build'
+    description = 'Zips the source for uploading to the store alongside the jar.'
+    archiveFileName = "${pluginName}-source.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    from(projectDir) {
+        include 'src/**'
+        include 'build.gradle', 'settings.gradle', 'gradle.properties', 'README.md'
+    }
+}
+
+tasks.named('build') { dependsOn shadowJar, sourceZip }

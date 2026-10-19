@@ -12,39 +12,37 @@ import javax.inject.Inject;
 /**
  * The plugin: lifecycle and wiring. The actual work lives in {@link TemplateScript}.
  *
- * Every field in the descriptor below matters:
- *   name             what the user sees in the plugin list
- *   version          bump it on every change; the store and the hub key off it
- *   minClientVersion the oldest plugin API your script needs, not a client release
- *   isExternal       true for anything not built into the client
- *
- * The class name is the script's identity: the jar is named after it, and a
- * marketplace listing joins to it by internalName. Renaming the class is a
- * breaking change.
+ * <p>The class name is the script's identity. The jar is named after it, the store listing
+ * joins to it by "internal name", and the client finds a downloaded jar by it. Rename it to
+ * your script's name before you publish, and never rename it afterwards.
  */
 @PluginDescriptor(
+        // What the player sees in the plugin list.
         name = "Template Script",
-        description = "Template script: idles, logs, and shows an overlay",
-        tags = {"example", "template"},
+        description = "Works on an object until the inventory is full, banks, and walks back",
+        tags = {"template", "skilling", "example"},
+        // Your script's version. Bump it on every build you upload: the store and the client
+        // key off it, and each version can only be uploaded once.
         version = TemplatePlugin.version,
-        // The plugin API level you need, which is not the client's release
-        // number. The client publishes both: it is on 1.x, and provides plugin
-        // API 2.6.22. Leave this alone unless you are using something added to
-        // the API after that; setting it to a client release like "1.0.5" says
-        // nothing useful, and setting it above the API level the client offers
-        // stops your script loading at all.
-        minClientVersion = "2.6.22",
+        // The oldest *plugin API* this script needs. This is not the client's release number
+        // (1.0.x); it is the API level the client provides (2.6.x). A client older than this
+        // refuses to load the script, and the store refuses to install it there.
+        // 2.6.31 is the first API with Script.reliability(), which this template uses.
+        minClientVersion = "2.6.31",
+        // Scripts start switched off; the player turns them on.
         enabledByDefault = false,
+        // Must be true for anything not built into the client. It is what applies the
+        // minClientVersion check above.
         isExternal = true
 )
 @Slf4j
 public class TemplatePlugin extends Plugin {
-    /** Your mark in the plugin list. Pick your own colour and initials. */
 
+    /** Shown in the stats panel title. Keep it in step with the descriptor above. */
     public static final String version = "1.0.0";
 
     @Inject
-    private TemplateScript exampleScript;
+    private TemplateScript script;
     @Inject
     private TemplateConfig config;
     @Inject
@@ -60,14 +58,19 @@ public class TemplatePlugin extends Plugin {
     @Override
     protected void startUp() {
         overlayManager.add(overlay);
-        // Start the loop here, never do the work itself: startUp runs on the
-        // client thread and must return immediately.
-        exampleScript.run(config);
+        // Start the loop and return. startUp runs on the Swing UI thread: doing any work here,
+        // or waiting for anything, freezes the client window.
+        script.run(config);
     }
 
     @Override
     protected void shutDown() {
-        exampleScript.shutdown();
+        script.shutdown();
         overlayManager.remove(overlay);
+    }
+
+    /** The running script, for the overlay. */
+    TemplateScript getScript() {
+        return script;
     }
 }

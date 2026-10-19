@@ -1,47 +1,309 @@
 package net.runelite.client.plugins.projectx.templateplugin;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.projectx.ProjectX;
 import net.runelite.client.plugins.projectx.Script;
+import net.runelite.client.plugins.projectx.api.tileobject.models.Rs2TileObjectModel;
+import net.runelite.client.plugins.projectx.inventorysetups.InventorySetup;
+import net.runelite.client.plugins.projectx.util.Rs2InventorySetup;
+import net.runelite.client.plugins.projectx.util.bank.Rs2Bank;
+import net.runelite.client.plugins.projectx.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.projectx.util.player.Rs2Player;
+import net.runelite.client.plugins.projectx.util.reliability.ActionResult;
+import net.runelite.client.plugins.projectx.util.reliability.Checkpoint;
+import net.runelite.client.plugins.projectx.util.reliability.Preconditions;
+import net.runelite.client.plugins.projectx.util.walker.Rs2Walker;
 
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The loop. Runs on a background executor, not the client thread.
+ * The loop: work on an object until the inventory is full, bank, walk back, repeat.
  *
- * Three rules keep scripts out of trouble:
- *   1. Never block the client thread. Game state reads that need it go through
- *      ProjectX.getClientThread().runOnClientThreadOptional(...).
- *   2. Wait on conditions with sleepUntil(...), not fixed sleeps.
- *   3. Leave no trace in shutdown(): cancel timers, clear state, unregister.
+ * <p>It runs on the script's own background executor, never on the client thread, so it is
+ * allowed to wait: {@code sleepUntil}, walking and guarded steps all block this thread and
+ * nothing else.
+ *
+ * <p>The shape to copy:
+ * <ol>
+ *   <li>A small {@link State} enum and one method per state. Each pass of the loop does one
+ *       state's worth of work and returns; the next pass picks up from there.</li>
+ *   <li>{@link #decide()} works out the state from the game, not from memory, so the script can
+ *       be started anywhere and can recover from anything by asking again.</li>
+ *   <li>Every action that can fail goes through {@code reliability().step(...)}: it is retried,
+ *       then recovered, and if it keeps failing the script stops itself and tells the player
+ *       why, instead of clicking forever.</li>
+ * </ol>
  */
 @Slf4j
 public class TemplateScript extends Script {
+
+    /** How far from the start tile still counts as "at the work spot". */
+    private static final int WORK_RADIUS = 12;
+
+    enum State {
+        /** Loading the chosen inventory setup from the bank, once, before starting. */
+        PREPARING,
+        /** At the work spot, working on the object. */
+        WORKING,
+        /** Inventory full: banking at the nearest bank. */
+        BANKING,
+        /** Walking back to where the run started. */
+        RETURNING
+    }
+
+    // Read by the overlay on the client thread every frame, written here on the script thread:
+    // volatile so the overlay always sees the latest value.
+    private volatile State state = State.PREPARING;
+    private volatile String status = "Starting";
+    private volatile long startedAt;
+    private volatile int trips;
+
+    private TemplateConfig config;
+    private WorldPoint workSpot;
+    private boolean prepared;
+
     public boolean run(TemplateConfig config) {
+        this.config = config;
+        startedAt = System.currentTimeMillis();
+        trips = 0;
+        workSpot = null;
+        prepared = false;
+        state = State.PREPARING;
+
+        // Set up reliability once, before the loop. Both settings survive shutdown(), so a
+        // script that is stopped and started again keeps them.
+        reliability()
+                // The name the player sees if the script ever has to stop itself.
+                .named("Template Script")
+                // What "getting somewhere" looks like. If this has not changed for the player's
+                // no-progress timeout (Project X settings > Script reliability), the recovery
+                // handler below runs once, and the script stops if that does not help.
+                .trackProgress(Rs2Inventory::fullSlotCount)
+                // What to do when a step has used all its retries, or nothing is progressing:
+                // put the game back into a known state. Return true if that worked.
+                .onRecover(ctx -> {
+                    log.info("Recovering after '{}': {}", ctx.getStep(), ctx.getReason());
+                    if (Rs2Bank.isOpen()) {
+                        Rs2Bank.closeBank();
+                    }
+                    Checkpoint last = ctx.getCheckpoint();
+                    WorldPoint back = last != null && last.getLocation() != null ? last.getLocation() : workSpot;
+                    boolean ok = back == null || Rs2Walker.walkTo(back, 3);
+                    state = decide();
+                    return ok;
+                });
+
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
-                // super.run() honours pause/stop and the blocking-event system
-                // (login, level-up, random events), so always check it first.
-                if (!super.run()) return;
-                if (!ProjectX.isLoggedIn()) return;
+                // 1. super.run() handles pausing, breaks, login and level-up screens, random
+                //    events and run energy. When it says no, do nothing this pass.
+                // 2. reliability().tick() counts time without progress and returns false once
+                //    the script has been stopped. Call it once per pass, after super.run().
+                if (!super.run() || !ProjectX.isLoggedIn() || !reliability().tick()) {
+                    return;
+                }
 
-                ProjectX.status = "Idling as " + Rs2Player.getLocalPlayer().getName();
+                if (workSpot == null) {
+                    // The first pass in game: remember where the player started, as both the
+                    // work spot and the first checkpoint a recovery can walk back to.
+                    workSpot = Rs2Player.getWorldLocation();
+                    reliability().checkpoint("Started", workSpot);
+                }
 
-                // ... your logic here.
-
+                switch (state) {
+                    case PREPARING:
+                        prepare();
+                        break;
+                    case WORKING:
+                        work();
+                        break;
+                    case BANKING:
+                        bank();
+                        break;
+                    case RETURNING:
+                        walkBack();
+                        break;
+                }
             } catch (Exception e) {
-                // Never let an exception escape into the executor: it kills the
-                // loop silently.
-                log.error("Template script failed", e);
+                // An exception that escapes this lambda cancels the schedule silently: the
+                // script looks like it is running and does nothing. Always catch and log.
+                log.error("Template script loop failed", e);
             }
-        }, 0, 600, TimeUnit.MILLISECONDS); // 600ms is one game tick
+        }, 0, 600, TimeUnit.MILLISECONDS); // 600 ms is one game tick
         return true;
+    }
+
+    /** Works out what to do next from what is actually on screen. */
+    private State decide() {
+        if (!prepared && config.inventorySetup() != null) return State.PREPARING;
+        if (Rs2Inventory.isFull()) return State.BANKING;
+        if (workSpot != null && !Rs2Player.isInArea(workSpot, WORK_RADIUS)) return State.RETURNING;
+        return State.WORKING;
+    }
+
+    private void prepare() {
+        InventorySetup chosen = config.inventorySetup();
+        if (chosen == null) {
+            prepared = true;
+            state = decide();
+            return;
+        }
+
+        status = "Loading " + chosen.getName();
+        // Rs2InventorySetup wraps a saved setup. Passing mainScheduledFuture lets it stop
+        // part-way if the script is switched off while it is withdrawing.
+        Rs2InventorySetup setup = new Rs2InventorySetup(chosen, mainScheduledFuture);
+
+        if (!setup.doesEquipmentMatch() || !setup.doesInventoryMatch()) {
+            ActionResult loaded = reliability().step("Load inventory setup")
+                    // Opens the nearest bank, then withdraws and wears what the setup needs.
+                    .action(() -> Rs2Bank.walkToBankAndUseBank() && setup.loadEquipment() && setup.loadInventory())
+                    .verify(() -> setup.doesEquipmentMatch() && setup.doesInventoryMatch(), 5_000)
+                    .run();
+            if (!loaded.isSuccess()) {
+                // Retried, recovered or stopped already. If the script is stopping, return
+                // straight away; otherwise try again next pass.
+                return;
+            }
+            Rs2Bank.closeBank();
+        }
+
+        prepared = true;
+        reliability().checkpointAtPlayer("Inventory setup loaded");
+        state = decide();
+    }
+
+    private void work() {
+        if (Rs2Inventory.isFull()) {
+            state = State.BANKING;
+            return;
+        }
+        // Still busy with the last click: let it finish. Clicking again would reset it.
+        if (Rs2Player.isAnimating() || Rs2Player.isMoving()) {
+            return;
+        }
+
+        String name = config.objectName().trim();
+        String action = config.action().trim();
+        if (name.isEmpty() || action.isEmpty()) {
+            // A safe stop: the player gets a message saying why, and shutdown() runs.
+            reliability().stop("Set the object and the action in the script's settings first.");
+            return;
+        }
+
+        // Find on the client thread (nearestOnClientThread), click off it. Never click from
+        // inside a client-thread call: the click is only queued, and every wait after it is
+        // measured against the wrong moment.
+        Rs2TileObjectModel target = ProjectX.getRs2TileObjectCache().query()
+                .withName(name)
+                .within(workSpot, WORK_RADIUS)
+                .nearestOnClientThread();
+        if (target == null) {
+            // Nothing there right now: trees and rocks respawn, so wait rather than count it
+            // as a failure. If it never comes back, the no-progress timeout notices.
+            status = "Waiting for " + name;
+            return;
+        }
+
+        status = action + " " + name;
+        reliability().step(action + " " + name)
+                // Checked before every attempt. An unmet precondition fails the step without
+                // running the action; add .fatal() to one to stop the script instead.
+                .require(Preconditions.inventoryNotFull())
+                // Return false when the click could not even be made.
+                .action(() -> target.click(action))
+                // Worked if the player starts moving to it or doing it within 3 seconds.
+                .verify(() -> Rs2Player.isAnimating() || Rs2Player.isMoving(), 3_000)
+                .maxRetries(2)
+                .run();
+    }
+
+    private void bank() {
+        status = "Banking";
+
+        ActionResult open = reliability().step("Open the bank")
+                .action(Rs2Bank::walkToBankAndUseBank)
+                .verify(Rs2Bank::isOpen, 5_000)
+                .run();
+        if (!open.isSuccess()) {
+            return;
+        }
+
+        InventorySetup chosen = config.inventorySetup();
+        String[] keep = keepItems();
+        ActionResult deposit = reliability().step("Deposit")
+                .require(Preconditions.bankOpen())
+                .action(() -> chosen != null
+                        // Keep everything the setup holds, matched the way the setup says.
+                        ? Rs2Bank.depositAllExcept(new Rs2InventorySetup(chosen, mainScheduledFuture).itemsToNotDeposit())
+                        : keep.length == 0 ? Rs2Bank.depositAll() : Rs2Bank.depositAllExcept(keep))
+                .verify(() -> !Rs2Inventory.isFull(), 3_000)
+                .run();
+        if (!deposit.isSuccess()) {
+            return;
+        }
+
+        trips++;
+        // A checkpoint marks the last step known to have worked. It counts as progress, and
+        // the recovery handler reads it to know where to resume from.
+        reliability().checkpoint("Banked");
+        Rs2Bank.closeBank();
+        state = State.RETURNING;
+    }
+
+    private void walkBack() {
+        if (workSpot == null || Rs2Player.isInArea(workSpot, WORK_RADIUS)) {
+            state = State.WORKING;
+            return;
+        }
+        status = "Walking back";
+
+        // walkTo blocks until it arrives or gives up, handling doors, stairs and transports.
+        ActionResult walked = reliability().step("Walk back to the work spot")
+                .action(() -> Rs2Walker.walkTo(workSpot, 3))
+                .run();
+        if (walked.isSuccess()) {
+            reliability().checkpointAtPlayer("Back at the work spot");
+            state = State.WORKING;
+        }
+    }
+
+    /** The "Keep items" setting as a list, without the blanks a stray comma leaves. */
+    private String[] keepItems() {
+        return Arrays.stream(config.keepItems().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toArray(String[]::new);
     }
 
     @Override
     public void shutdown() {
+        // Script.shutdown() cancels the loop, resets the reliability service and clears the
+        // shared helpers. Call it first, then clear your own state, so a restart is clean.
         super.shutdown();
-        ProjectX.status = "";
+        state = State.PREPARING;
+        status = "Stopped";
+        workSpot = null;
+    }
+
+    // Read by the overlay.
+
+    public State getState() {
+        return state;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    /** When this run started, in epoch millis. The stats panel resets its numbers when this changes. */
+    public long getStartedAt() {
+        return startedAt;
+    }
+
+    public int getTrips() {
+        return trips;
     }
 }
