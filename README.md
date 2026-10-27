@@ -13,7 +13,18 @@
 ---
 
 Scripts are RuneLite plugins compiled against the [Project X client](https://github.com/iEasyScript/xclient).
-This repository is a complete, small script you can rename and build on. It works on an object
+You write them with one import, `net.runelite.client.plugins.projectx.bot.*`, which gives short names
+like `Inventory`, `Bank`, `Walker`, `Objects` and `Npcs`:
+
+```java
+var rock = Objects.query().nameEquals("Copper rocks").nearestReachable();
+if (rock != null) rock.interact("Mine");
+
+Npcs.query("Cow").nearest().interact("Attack");
+```
+
+The full guide is [`docs/SCRIPTING.md`](https://github.com/iEasyScript/xclient/blob/main/docs/SCRIPTING.md)
+in the client repo. This repository is a complete, small script you can rename and build on. It works on an object
 (a tree, a rock) until the inventory is full, banks at the nearest bank, walks back and carries
 on, and it shows the parts every store script should have:
 
@@ -21,7 +32,7 @@ on, and it shows the parts every store script should have:
 - guarded steps, a recovery handler and checkpoints from `reliability()`, so it stops itself
   cleanly instead of clicking forever when something goes wrong;
 - the shared stats panel (`ScriptPanel`, `SkillTracker`) every Project X script uses;
-- an inventory-setup picker in its settings, loaded with `Rs2InventorySetup`.
+- an inventory-setup picker in its settings, loaded with `Loadout`.
 
 Your source stays yours. The store needs your source to review a build, but only the jar is
 ever given to players.
@@ -74,7 +85,7 @@ To make it yours:
 
 The build compiles against the Project X client jar. It finds one in this order:
 
-1. `-PprojectxClientPath=/path/to/projectx-1.0.56.jar`, if you pass it;
+1. `-PprojectxClientPath=/path/to/projectx-1.0.79.jar`, if you pass it;
 2. the copy the Project X launcher already downloaded, `~/.projectx/projectx-<version>.jar`
    (`%USERPROFILE%\.projectx\` on Windows);
 3. otherwise it downloads `projectx-<version>.jar` from the
@@ -89,25 +100,33 @@ client keeps the old values even when it runs on a new one, which is how a scrip
 clicking the wrong widget after a game update. When a new client is released, bump
 `projectxClientVersion`, rebuild, and upload a new version.
 
-## Testing it
+## Testing it: the dev folder
 
-Read this before you plan your testing: **the client only keeps scripts that are on the store.**
+You do not have to publish to try your script. Copy the jar into
 
-The client loads any jar you copy into `~/.runelite/projectx-plugins/`
-(`%USERPROFILE%\.runelite\projectx-plugins\` on Windows), but about 30 seconds after start-up,
-and every 5 minutes after that, it checks its scripts against the store catalogue and switches
-off and unloads any it does not recognise. A script that has never been published is one of
-those, so it disappears from the plugin list shortly after it appears.
+```
+%USERPROFILE%\.runelite\projectx-plugins\dev\
+```
 
-So, today:
+(`~/.runelite/projectx-plugins/dev/` elsewhere) and restart the client. It loads from there and
+stays loaded. Needs client 1.0.77 or later. Since 1.0.78 the **My Scripts** window has a Store tab
+and a Local tab, and your dev-folder scripts show up under Local.
+
+- A jar that reuses a store script's name, package or hash is refused, so give yours its own
+  plugin class name.
+- Restart after copying a new build over the old one.
+- Do not drop test jars straight into `projectx-plugins/`: the client keeps only scripts the
+  store knows about there, and switches the rest off shortly after start-up.
+
+Also worth doing:
 
 - **Compile against the live client.** Most mistakes in a script are calls that no longer exist
   or have a different signature, and the build catches every one of those.
 - **Keep your logic easy to check.** Decide what to do from the game in one place (`decide()` in
   the template), keep each state's method short, and log state changes. The session log is in
   `~/.runelite/logs/projectx/`.
-- **Run it for real by submitting it.** Every build is reviewed before it goes live; once your
-  first version is approved, each new version is a new upload on the same listing.
+- **Submit it when it works.** Every build is reviewed before it goes live; once your first
+  version is approved, each new version is a new upload on the same listing.
 
 ## Publishing to the store
 
@@ -131,22 +150,23 @@ They are easy to mix up, and mixing them up stops your script loading.
 
 | | What it is | Now | Where it goes |
 |---|---|---|---|
-| **Client release** | What the client is called | `1.0.56` | `projectxClientVersion` in `gradle.properties` |
-| **Plugin API** | What the client offers scripts | `2.6.31` | `minClientVersion` in your `@PluginDescriptor` |
+| **Client release** | What the client is called | `1.0.79` | `projectxClientVersion` in `gradle.properties` |
+| **Plugin API** | What the client offers scripts | `2.7.0` | `minClientVersion` in your `@PluginDescriptor` |
 
 `minClientVersion` is the oldest plugin API your script needs. A client that offers less will not
-load the script (the log says `Plugin X needs plugin API 2.6.31 or higher`), and the plugin hub
+load the script (the log says `Plugin X needs plugin API 2.7.0 or higher`), and the plugin hub
 will not install it there. Set it to the API level that added the newest thing you use:
 
 | Plugin API | Client | Added |
 |---|---|---|
 | `2.6.25` | 1.0.31 | `ScriptPanel`, `ScriptPanelOverlay`, `SkillTracker` |
-| `2.6.29` | 1.0.47 | `ProjectX.withDirectInput`, `Rs2Prayer.flick` / `flickQuickPrayer` |
-| `2.6.30` | 1.0.49 | `Rs2BoatNavigator`; `Rs2Walker.walkTo` sails to targets at sea |
+| `2.6.29` | 1.0.47 | `ProjectX.withDirectInput`, `Prayers.flick` / `flickQuickPrayer` |
+| `2.6.30` | 1.0.49 | `BoatNavigator`; `Walker.walkTo` sails to targets at sea |
 | `2.6.31` | 1.0.56 | `Script.reliability()` and the `util.reliability` package |
+| `2.7.0` | 1.0.79 | The simple API: the `bot` package (`Inventory`, `Objects.query()`, `Loadout`, ...) |
 
-The template uses `reliability()`, so it declares `2.6.31`. Putting a client release number such as
-`1.0.56` there is wrong: as an API level it means "anything", so nothing is checked. `isExternal = true`
+The template uses the simple API, so it declares `2.7.0`. Putting a client release number such as
+`1.0.79` there is wrong: as an API level it means "anything", so nothing is checked. `isExternal = true`
 must be set for the check to apply at all.
 
 ## The rules that matter
@@ -161,15 +181,14 @@ must be set for the check to apply at all.
 
 1. **Never click on the client thread.** A click made there is only queued and the call returns
    at once, so the `sleepUntil` after it is measuring the wrong moment and the action looks like
-   it failed. Find things on the client thread, click off it:
+   it failed. Search and click from the script thread, as the loop does:
    ```java
-   Rs2TileObjectModel tree = ProjectX.getRs2TileObjectCache().query()
-           .withName("Tree").nearestOnClientThread();   // read on the client thread
-   if (tree != null) tree.click("Chop down");           // click from the script thread
+   var tree = Objects.query("Tree").nearest();          // the search hops threads for you
+   if (tree != null) tree.interact("Chop down");        // click from the script thread
    ```
 2. **Read raw client state on the client thread**, with
-   `ProjectX.getClientThread().runOnClientThreadOptional(() -> ...)`. The `Rs2*` helpers already
-   do this for you. Avoid `clientThread.invoke(() -> someBoolean())`: a lambda that returns a
+   `ProjectX.getClientThread().runOnClientThreadOptional(() -> ...)`. The helpers (`Inventory`, `Player`,
+   `Bank` and the rest) already do this for you. Avoid `clientThread.invoke(() -> someBoolean())`: a lambda that returns a
    `boolean` picks the overload that re-runs it every tick until it returns true, and returns
    nothing.
 3. **Wait on conditions, not clocks:** `sleepUntil(() -> condition, timeoutMs)`.
@@ -178,23 +197,24 @@ must be set for the check to apply at all.
 5. **Clean up in `shutdown()`.** Call `super.shutdown()`, then clear your own state, so the next
    start is clean.
 6. **Keep `build()` and `render()` cheap.** They run every frame. No waiting, no clicking, no
-   network calls (such as `Rs2GrandExchange.getPrice`).
+   network calls (such as `GrandExchange.getPrice`).
 
 ## Common traps
 
-- **`Rs2Bank.withdrawX(name, amount)` only matches a bank stack holding at least `amount`.** Ask
-  for 28 when the bank has 20 and nothing happens. Use `Math.min(amount, Rs2Bank.count(name, true))`.
-- **Name matching differs between methods.** `Rs2Inventory.hasItem("axe")` matches a pickaxe
-  (partial), while `Rs2Inventory.contains("axe")` does not (exact). Most name methods have an
+- **`Bank.withdrawX(name, amount)` only matches a bank stack holding at least `amount`.** Ask
+  for 28 when the bank has 20 and nothing happens. Use `Math.min(amount, Bank.count(name, true))`.
+- **Name matching differs between methods.** `Inventory.hasItem("axe")` matches a pickaxe
+  (partial), while `Inventory.contains("axe")` does not (exact). Most name methods have an
   overload with a `boolean exact` parameter: pass `true` unless you mean "contains".
-- **`Rs2Inventory.count(name)` counts slots**, not a stack. Use `itemQuantity(name)` for coins,
+- **`Inventory.count(name)` counts slots**, not a stack. Use `itemQuantity(name)` for coins,
   runes and other stackables.
 - **The `SkillTracker` resets whenever the start time you pass changes.** Store
   `System.currentTimeMillis()` once when the script starts and pass that; never `now - runtime`.
 - **Helpers set `ProjectX.status` themselves** (opening the bank, clicking an object). Keep your
   own status field for the stats panel, as the template does.
-- **`Rs2Npc` and `Rs2GameObject` are deprecated for removal.** Use the caches:
-  `ProjectX.getRs2NpcCache().query()` and `ProjectX.getRs2TileObjectCache().query()`.
+- **The old `Rs2*` names still work but are deprecated.** Use the short names: `Objects.query()`,
+  `Npcs.query()`, `Inventory`, `Bank`. The full old-to-new table is in the client repo's
+  `docs/api-migration.tsv`.
 - **Use named ids**, such as `net.runelite.api.gameval.InterfaceID` and `ItemID`, never raw
   numbers. Game updates move widgets; the named ids move with them when you rebuild.
 

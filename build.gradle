@@ -19,7 +19,7 @@ def pluginName = project.findProperty('pluginName') ?: 'TemplatePlugin'
 // Always compile against the client players are running. Constants such as item, object and
 // widget ids are copied into your classes at compile time, so an old client jar bakes old
 // ids into your script.
-def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.56'
+def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.79'
 def clientPath = project.findProperty('projectxClientPath')
 if (!clientPath) {
     def launcherJar = new File(System.getProperty('user.home'), ".projectx/projectx-${clientVersion}.jar")
