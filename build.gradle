@@ -19,7 +19,7 @@ def pluginName = project.findProperty('pluginName') ?: 'TemplatePlugin'
 // Always compile against the client players are running. Constants such as item, object and
 // widget ids are copied into your classes at compile time, so an old client jar bakes old
 // ids into your script.
-def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.79'
+def clientVersion = project.findProperty('projectxClientVersion') ?: '1.0.109'
 def clientPath = project.findProperty('projectxClientPath')
 if (!clientPath) {
     def launcherJar = new File(System.getProperty('user.home'), ".projectx/projectx-${clientVersion}.jar")
@@ -45,10 +45,10 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 repositories {
-    // The client jar is published as a GitHub release asset, not to Maven.
+    // The client jar is served by xclient.dev (same <version>/projectx-<version>.jar layout), not Maven.
     ivy {
         name = 'xclient-releases'
-        url = uri('https://github.com/iEasyScript/xclient/releases/download')
+        url = uri('https://xclient.dev/api/v1/client/releases')
         patternLayout {
             artifact '[revision]/projectx-[revision].[ext]'
         }

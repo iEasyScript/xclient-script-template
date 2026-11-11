@@ -12,7 +12,7 @@
 
 ---
 
-Scripts are RuneLite plugins compiled against the [Project X client](https://github.com/iEasyScript/xclient).
+Scripts are RuneLite plugins compiled against the [Project X client](https://xclient.dev).
 You write them with one import, `net.runelite.client.plugins.projectx.bot.*`, which gives short names
 like `Inventory`, `Bank`, `Walker`, `Objects` and `Npcs`:
 
@@ -23,8 +23,8 @@ if (rock != null) rock.interact("Mine");
 Npcs.query("Cow").nearest().interact("Attack");
 ```
 
-The full guide is [`docs/SCRIPTING.md`](https://github.com/iEasyScript/xclient/blob/main/docs/SCRIPTING.md)
-in the client repo. This repository is a complete, small script you can rename and build on. It works on an object
+The full guide is [Scripting API guide](https://xclient.dev/osrs/developer/docs/api)
+on the developer site. This repository is a complete, small script you can rename and build on. It works on an object
 (a tree, a rock) until the inventory is full, banks at the nearest bank, walks back and carries
 on, and it shows the parts every store script should have:
 
@@ -89,7 +89,7 @@ The build compiles against the Project X client jar. It finds one in this order:
 2. the copy the Project X launcher already downloaded, `~/.projectx/projectx-<version>.jar`
    (`%USERPROFILE%\.projectx\` on Windows);
 3. otherwise it downloads `projectx-<version>.jar` from the
-   [client's GitHub release](https://github.com/iEasyScript/xclient/releases).
+   [client releases on xclient.dev](https://xclient.dev/api/v1/client/releases).
 
 `<version>` is `projectxClientVersion` in `gradle.properties`. The first line of the build says
 which jar it used.
