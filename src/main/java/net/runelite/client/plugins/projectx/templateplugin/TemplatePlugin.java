@@ -25,10 +25,10 @@ import javax.inject.Inject;
         // key off it, and each version can only be uploaded once.
         version = TemplatePlugin.version,
         // The oldest *plugin API* this script needs. This is not the client's release number
-        // (1.0.x); it is the API level the client provides (2.x.y). A client older than this
+        // (2.0.0); it is the API level the client provides (3.x.y). A client older than this
         // refuses to load the script, and the store refuses to install it there.
-        // 2.7.0 is the first API with the simple bot package (Inventory, Objects.query(), Loadout...).
-        minClientVersion = "2.7.0",
+        // 3.0.0 is the first API where every class has its short name only (Bank, Npcs, Walker...).
+        minClientVersion = "3.0.0",
         // Scripts start switched off; the player turns them on.
         enabledByDefault = false,
         // Must be true for anything not built into the client. It is what applies the

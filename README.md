@@ -85,7 +85,7 @@ To make it yours:
 
 The build compiles against the Project X client jar. It finds one in this order:
 
-1. `-PprojectxClientPath=/path/to/projectx-1.0.79.jar`, if you pass it;
+1. `-PprojectxClientPath=/path/to/projectx-2.0.0.jar`, if you pass it;
 2. the copy the Project X launcher already downloaded, `~/.projectx/projectx-<version>.jar`
    (`%USERPROFILE%\.projectx\` on Windows);
 3. otherwise it downloads `projectx-<version>.jar` from the
@@ -150,11 +150,11 @@ They are easy to mix up, and mixing them up stops your script loading.
 
 | | What it is | Now | Where it goes |
 |---|---|---|---|
-| **Client release** | What the client is called | `1.0.79` | `projectxClientVersion` in `gradle.properties` |
-| **Plugin API** | What the client offers scripts | `2.7.0` | `minClientVersion` in your `@PluginDescriptor` |
+| **Client release** | What the client is called | `2.0.0` | `projectxClientVersion` in `gradle.properties` |
+| **Plugin API** | What the client offers scripts | `3.0.0` | `minClientVersion` in your `@PluginDescriptor` |
 
 `minClientVersion` is the oldest plugin API your script needs. A client that offers less will not
-load the script (the log says `Plugin X needs plugin API 2.7.0 or higher`), and the plugin hub
+load the script (the log says `Plugin X needs plugin API 3.0.0 or higher`), and the plugin hub
 will not install it there. Set it to the API level that added the newest thing you use:
 
 | Plugin API | Client | Added |
@@ -164,9 +164,10 @@ will not install it there. Set it to the API level that added the newest thing y
 | `2.6.30` | 1.0.49 | `BoatNavigator`; `Walker.walkTo` sails to targets at sea |
 | `2.6.31` | 1.0.56 | `Script.reliability()` and the `util.reliability` package |
 | `2.7.0` | 1.0.79 | The simple API: the `bot` package (`Inventory`, `Objects.query()`, `Loadout`, ...) |
+| `3.0.0` | 2.0.0 | Clean names only: every class and method is under its short name (`Bank`, `Npcs`, `Walker`, `ProjectX.getNpcCache()`, ...); the older prefixed names are gone from the API |
 
-The template uses the simple API, so it declares `2.7.0`. Putting a client release number such as
-`1.0.79` there is wrong: as an API level it means "anything", so nothing is checked. `isExternal = true`
+The template is written for the 3.0 names, so it declares `3.0.0`. Putting a client release number such as
+`2.0.0` there is wrong: as an API level it means "anything", so nothing is checked. `isExternal = true`
 must be set for the check to apply at all.
 
 ## The rules that matter
@@ -212,9 +213,10 @@ must be set for the check to apply at all.
   `System.currentTimeMillis()` once when the script starts and pass that; never `now - runtime`.
 - **Helpers set `ProjectX.status` themselves** (opening the bank, clicking an object). Keep your
   own status field for the stats panel, as the template does.
-- **The old `Rs2*` names still work but are deprecated.** Use the short names: `Objects.query()`,
-  `Npcs.query()`, `Inventory`, `Bank`. The full old-to-new table is in the client repo's
-  `docs/api-migration.tsv`.
+- **Use the short names**: `Objects.query()`, `Npcs.query()`, `Inventory`, `Bank`, `Walker`. Plugin API 3.0
+  has no other names for them. Scripts already compiled against an older client keep running,
+  because the client renames old calls as it loads them; to bring old source over, see the
+  [names that changed in 3.0](https://xclient.dev/osrs/developer/docs/api#names-before-3-0).
 - **Use named ids**, such as `net.runelite.api.gameval.InterfaceID` and `ItemID`, never raw
   numbers. Game updates move widgets; the named ids move with them when you rebuild.
 
